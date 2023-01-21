@@ -42,10 +42,6 @@ for ((i=1;i<=$#;i++)); do
     then
         echo "Name: bash"
         echo "Usage: bash Assgn1_8_<20CS30019>.sh [-c category] [-n name] [-s column] record[date category amount name] [-h] "
-        echo "Description: 1.By default, the script accepts 4 arguments representing a new record (row) in csv and adds the record to main.csv."
-        echo "2.The -c accepts category and prints the amount of money spent in that category."
-        echo "3.The -n accepts name and prints the amount spent by that person."
-        echo "4.The -s sorts the csv by column."
     fi
 done
 
