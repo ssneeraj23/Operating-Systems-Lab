@@ -31,11 +31,11 @@ done
 
 cwd="$(pwd)"
 
-cwd="${cwd}/input (1).txt"
+cwd="${cwd}/input.txt"
 
 while read -r line
 do
-line="$((${line//[ $'\001'-$'\037']}+7))"
+line="$((${line//[ $'\001'-$'\037']}))"
   for i in ${primes[@]}; do
   if [[ $((line%i)) -eq 0 ]]; then
   echo -n $i" "	
