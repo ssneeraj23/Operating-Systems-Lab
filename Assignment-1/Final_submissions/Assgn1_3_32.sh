@@ -42,9 +42,7 @@ for f in $json_dir/*.json; do
 	filename="$(basename $file .json)"
 	cmd+=" $json_dir/$(basename $f) > $csv"
 	#echo "$cmd"
-	for k in "${list[@]}"; do
-		echo "$k," > $csv.tmp
-	done
+	echo ${list[*]} | tr ' ' ',' > $csv.tmp
 	eval $cmd
 	cat $csv >> $csv.tmp
 	mv $csv.tmp $csv
