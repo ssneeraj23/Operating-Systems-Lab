@@ -1,7 +1,3 @@
-// installing the libraries: sudo apt-get install libreadline-dev
-//compilation: gcc -g OS_Part_a_h.c -lreadline
-
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,8 +9,9 @@
 #include <sys/wait.h>
 
 char **get_input(char * line){
-    char ** cmd=malloc(8*sizeof(char*));
-    char *delimiter=" ";
+    char ** cmd=(char**)malloc(8*sizeof(char*));
+    char f=' ';
+    char *delimiter=&f;
     
     int i=0;
     char * token=strtok(line, delimiter);
@@ -33,7 +30,7 @@ void handle_cd(char * input){
 						perror("getcwd() error");
 						return;
 					}
-        
+        //printf("%s",direc);
         return;
     }
     else{
@@ -42,6 +39,7 @@ void handle_cd(char * input){
         strncpy(token,input,3);
 		if(strcmp(token,"cd ")==0){
 			strcpy(directory,input+3);
+            printf("directory: %s\n",directory);
 			if(chdir(directory)!=0){
 				perror("chdir() error");			
 				return ;
@@ -67,11 +65,10 @@ int main() {
         getcwd(direc,1024);
         printf("new_root@GROUP_32:%s",direc);
         input = readline("# ");
-        
-        char * temp;
+        char  temp[1024];
         strcpy(temp,input);
-        command = get_input(temp);
-        
+        command = get_input(input);
+
         if (!command[0]) {      /* Handle empty commands */
             free(input);
             free(command);
