@@ -33,7 +33,7 @@ void handle_cd(char * input){
 						perror("getcwd() error");
 						return;
 					}
-        //printf("%s",direc);
+        
         return;
     }
     else{
@@ -42,7 +42,6 @@ void handle_cd(char * input){
         strncpy(token,input,3);
 		if(strcmp(token,"cd ")==0){
 			strcpy(directory,input+3);
-            printf("directory: %s\n",directory);
 			if(chdir(directory)!=0){
 				perror("chdir() error");			
 				return ;
@@ -68,8 +67,11 @@ int main() {
         getcwd(direc,1024);
         printf("new_root@GROUP_32:%s",direc);
         input = readline("# ");
-        command = get_input(input);
-
+        
+        char * temp;
+        strcpy(temp,input);
+        command = get_input(temp);
+        
         if (!command[0]) {      /* Handle empty commands */
             free(input);
             free(command);
@@ -95,4 +97,3 @@ int main() {
 
     return 0;
 }
-
