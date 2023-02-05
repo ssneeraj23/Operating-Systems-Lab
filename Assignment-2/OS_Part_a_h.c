@@ -8,7 +8,7 @@
 #include "/usr/include/readline/readline.h"
 #include <sys/wait.h>
 
-char **get_input(char *line)
+char **get_input(char *line,int &last)
 {
     char **cmd = (char **)malloc(8 * sizeof(char *));
     char f = ' ';
@@ -22,6 +22,7 @@ char **get_input(char *line)
         token = strtok(NULL, delimiter);
     }
     cmd[i++] = NULL;
+    last=i;
     return cmd;
 }
 void handle_cd(char *input)
@@ -64,7 +65,7 @@ void handle_cd(char *input)
     }
 }
 
-    void execprocess(char **command, char *input)
+    void execprocess(char **command, char *input,int background,int last)
     {
         pid_t child_pid;
         int stat_loc;
@@ -73,6 +74,10 @@ void handle_cd(char *input)
             handle_cd(input);
             return;
         }
+        if(background==1)
+            {
+                command[last-2]=NULL;
+            }
         child_pid = fork();
         if (child_pid == 0)
         {
@@ -83,34 +88,42 @@ void handle_cd(char *input)
         }
         else
         {
-            waitpid(child_pid, &stat_loc, WUNTRACED);
+            if(!background)waitpid(child_pid, &stat_loc, WUNTRACED);
             return;
             // should not wait if we running a program in background
         }
     }
+
+
     int main()
     {
         char **command;
         char *input;
         pid_t child_pid;
         char direc[1024];
-
+        int background;
+        int last;
         while (1)
         {
+            background=0;
             getcwd(direc, 1024);
             printf("new_root@GROUP_32:%s", direc);
             input = readline("# ");
             char temp[1024];
             strcpy(temp, input);
-            command = get_input(input);
-
+            command = get_input(input,last);
+            
             if (!command[0])
             { /* Handle empty commands */
                 free(input);
                 free(command);
                 continue;
             }
-            execprocess(command,input);
+            if(command[last-2][0]=='&')
+            {
+                background=1;
+            }
+            execprocess(command,input,background,last);
             free(input);
             free(command);
         }
