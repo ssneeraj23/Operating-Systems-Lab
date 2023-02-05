@@ -1,3 +1,7 @@
+// installing the libraries: sudo apt-get install libreadline-dev
+//compilation: gcc -g OS_Part_a_h.c -lreadline
+
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
