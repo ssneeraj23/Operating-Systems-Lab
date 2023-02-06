@@ -22,6 +22,7 @@ struct command
     char *outredirect, *inredirect;
 };
 
+
 vector<command> get_Input(const char user_input[])
 {
     char *user_input_copy = strdup(user_input);
@@ -69,16 +70,45 @@ vector<command> get_Input(const char user_input[])
     return vec;
 }
 
+void handle_cd(command c)
+{
+    char direc[1024];
+    
+    if (c.args[1]==NULL)
+    {
+        chdir(getenv("HOME"));
+        if ((getcwd(direc, sizeof(direc))) == NULL)
+        {
+            perror("getcwd() error");
+            return;
+        }
+        // printf("%s",direc);
+        return;
+    }
+    else
+    {
+            if (chdir(c.args[1]) != 0)
+            {
+                perror("chdir() error");
+                return;
+            }
+            else
+            {
+                if ((getcwd(direc, sizeof(direc))) == NULL)
+                {
+                    perror("getcwd() error");
+                    return;
+                }
+            }
+        }
+    }
 
 void execprocess(const vector<command> &procs, int background)
 {
-    // current_process_group = 0;
-    // foregroundprocs.clear();
-    // while (!stoppedprocs.empty())
-    //     stoppedprocs.pop();
     int pipefd[2];
     for (int i = 0; i < procs.size(); i++)
     {
+        if(strcmp(procs[i].args[0],"cd")==0){handle_cd(procs[i]);continue;}
         int infd = STDIN_FILENO, outfd = STDOUT_FILENO;
         if (procs[i].inredirect != NULL)
         {
@@ -100,12 +130,10 @@ void execprocess(const vector<command> &procs, int background)
             }
             outfd = pipefd[1];
         }
-        // sigchldBlocker(SIG_BLOCK);
         pid_t child_pid = fork();
         int stat_loc;
         if (child_pid == 0)
         {
-            // sigchldBlocker(SIG_UNBLOCK);
             if (infd != STDIN_FILENO)
             {
                 dup2(infd, STDIN_FILENO);
@@ -116,48 +144,16 @@ void execprocess(const vector<command> &procs, int background)
                 dup2(outfd, STDOUT_FILENO);
                 close(outfd);
             }
-            // setpgid(0, current_process_group);
             execvp(procs[i].args[0], procs[i].args);
             perror("Exec error: ");
             exit(EXIT_FAILURE);
         }
         if(!background)waitpid(child_pid, &stat_loc, WUNTRACED);
-        // if (current_process_group == 0)
-        // {
-        //     current_process_group = child_pid;
-        //     if (!background)
-        //     {
-        //         tcsetpgrp(STDIN_FILENO, current_process_group);
-        //         tcsetattr(STDIN_FILENO, TCSANOW, &oldtio);
-        //     }
-        // }
-        // if (!background)
-        //     foregroundprocs.insert(child_pid);
-        // else
-        //     backgroundprocs.insert(child_pid);
-        // sigchldBlocker(SIG_UNBLOCK);
         if (i + 1 < procs.size())
             close(outfd);
     }
-    // if (!background)
-    // {
-    //     while (!foregroundprocs.empty())
-    //         ;
-    //     while (!stoppedprocs.empty())
-    //     {
-    //         backgroundprocs.insert(stoppedprocs.top());
-    //         kill(stoppedprocs.top(), SIGCONT);
-    //         stoppedprocs.pop();
-    //     }
-    //     tcsetpgrp(STDIN_FILENO, getpgrp());
-    //     tcsetattr(STDIN_FILENO, TCSANOW, &tio);
-    // }
-    // current_process_group = 0;
-    // foregroundprocs.clear();
-    // while (!stoppedprocs.empty())
-    //     stoppedprocs.pop();
+    
 }
-
 
 
 //This is main
@@ -193,15 +189,6 @@ int main()
                 p[i+1]=NULL;
                 printf("Background\n");
             }
-            // for(auto x:v)
-            // {
-            //     int i=0;
-            //     while(x.args[i]!=NULL)
-            //     {
-            //         cout<<x.args[i]<<endl;
-            //         ++i;
-            //     }
-            // }
             execprocess(v,background);
             free(input);
 
