@@ -160,18 +160,21 @@ void execprocess(const vector<command> &procs, int background)
 
 int main()
     {
+        rl_bind_keyseq("\001",rl_beg_of_line);
+        rl_bind_keyseq("\005",rl_end_of_line);
         vector <command> v;
         char *input;
         pid_t child_pid;
         char direc[1024];
+        char temp1[1080];
         int background;
         int last;
         while (1)
         {
             background=0;
             getcwd(direc, 1024);
-            printf("new_root@GROUP_32:%s", direc);
-            input = readline("# ");
+            sprintf(temp1,"new_root@GROUP_32:%s#", direc);
+            input = readline(temp1);
             char temp[1024];
             strcpy(temp, input);
             v = get_Input(temp);
