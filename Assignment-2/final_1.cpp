@@ -22,8 +22,8 @@
 using namespace std;
 
 // Parsing Input Command
-int child_to_kill;
- 
+int child_to_kill=-1;
+int command_count=0;
 struct command
 {
     char *args[128];
@@ -33,13 +33,12 @@ struct command
 void sigintHandlerforc(int sig_num)
 {
     printf("\n");
-	signal(SIGINT, sigintHandlerforc);
 	if(child_to_kill!=-1)
     {
         kill(child_to_kill,9);
         child_to_kill=-1;
     }
-	fflush(stdout);
+    if(command_count<=1)return;
     return;
 }
 
@@ -223,6 +222,7 @@ void execprocess(const vector<command> &procs, int background)
             exit(EXIT_FAILURE);
         }
         if(!background)waitpid(child_pid, &stat_loc, WUNTRACED);
+        else child_to_kill=-1;
         if (i + 1 < procs.size())
             close(outfd);
     }
@@ -251,6 +251,7 @@ int main()
             getcwd(direc, 1024);
             sprintf(temp1,"new_root@GROUP_32:%s#", direc);
             input = readline(temp1);
+            ++command_count;
             char temp[1024];
             strcpy(temp, input);
             v = get_Input(temp);
