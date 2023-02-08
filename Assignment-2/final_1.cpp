@@ -1,5 +1,7 @@
 #include <stdlib.h>
+#include<signal.h>
 #include <stdio.h>
+#include <csignal>
 #include <string.h>
 #include <readline/readline.h>
 #include <unistd.h>
@@ -12,9 +14,14 @@
 #include<sys/types.h>
 #include<sys/stat.h>
 #include <fcntl.h> 
+
+
+//g++ -g final_1.cpp -lreadline
+
 using namespace std;
 
 // Parsing Input Command
+int child_to_kill;
  
 struct command
 {
@@ -22,6 +29,27 @@ struct command
     char *outredirect, *inredirect;
 };
 
+void sigintHandlerforc(int sig_num)
+{
+    printf("\n");
+	signal(SIGINT, sigintHandlerforc);
+	if(child_to_kill!=-1)
+    {
+        kill(child_to_kill,9);
+        child_to_kill=-1;
+    }
+	fflush(stdout);
+    return;
+}
+
+void sigintHandlerforz(int sig_num)
+{
+    printf("\n");
+    raise(SIGCHLD);
+    setpgid(child_to_kill,0);
+    kill(child_to_kill,SIGCONT);
+    return;
+}
 
 vector<command> get_Input(const char user_input[])
 {
@@ -103,12 +131,55 @@ void handle_cd(command c)
         }
     }
 
+void handle_sb(command c)
+{
+    if(strcmp(c.args[1],"0")==0)
+        {
+            printf("0\n");
+            return;
+        }
+    char buf1[13];
+    char buf2[13];
+    char buf3[13];
+    char buf4[13];
+    char f_name[50];
+    int flag=0;
+    while(1)
+    {
+        bzero(buf1,13);
+        bzero(buf2,13);
+        bzero(buf3,13);
+        bzero(f_name,50);
+        if(flag==0)
+        {
+           sprintf(f_name,"/proc/%s/stat",c.args[1]);
+        //    printf("f_name si %s\n",f_name);
+           flag=1;
+        }
+        else sprintf(f_name,"/proc/%s/stat",buf4);
+        //printf("f_name si %s\n",f_name); 
+        FILE *f=fopen(f_name,"r");
+        bzero(buf4,13);
+        fscanf(f,"%s %s %s %s",buf1,buf2,buf3,buf4);
+        if(strcmp(buf4,"0")==0)
+        {
+            printf("0\n");
+            break;
+        }
+        printf("%s\n",buf4);
+    }
+    return;
+
+}
+
+
 void execprocess(const vector<command> &procs, int background)
 {
     int pipefd[2];
     for (int i = 0; i < procs.size(); i++)
     {
         if(strcmp(procs[i].args[0],"cd")==0){handle_cd(procs[i]);continue;}
+        if(strcmp(procs[i].args[0],"sb")==0){handle_sb(procs[i]);continue;}
         int infd = STDIN_FILENO, outfd = STDOUT_FILENO;
         if (procs[i].inredirect != NULL)
         {
@@ -131,6 +202,7 @@ void execprocess(const vector<command> &procs, int background)
             outfd = pipefd[1];
         }
         pid_t child_pid = fork();
+        child_to_kill=child_pid;
         int stat_loc;
         if (child_pid == 0)
         {
@@ -160,6 +232,8 @@ void execprocess(const vector<command> &procs, int background)
 
 int main()
     {
+        signal(SIGINT, sigintHandlerforc);
+        signal(SIGTSTP, sigintHandlerforz);
         rl_bind_keyseq("\001",rl_beg_of_line);
         rl_bind_keyseq("\005",rl_end_of_line);
         vector <command> v;
