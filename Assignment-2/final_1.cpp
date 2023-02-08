@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include<signal.h>
+#include <signal.h>
 #include <stdio.h>
 #include <csignal>
 #include <string.h>
@@ -14,6 +14,7 @@
 #include<sys/types.h>
 #include<sys/stat.h>
 #include <fcntl.h> 
+
 
 
 //g++ -g final_1.cpp -lreadline
@@ -45,9 +46,9 @@ void sigintHandlerforc(int sig_num)
 void sigintHandlerforz(int sig_num)
 {
     printf("\n");
-    raise(SIGCHLD);
-    setpgid(child_to_kill,0);
     kill(child_to_kill,SIGCONT);
+    raise(SIGCHLD);
+    child_to_kill=-1;
     return;
 }
 
@@ -206,6 +207,7 @@ void execprocess(const vector<command> &procs, int background)
         int stat_loc;
         if (child_pid == 0)
         {
+            setpgid(0,0);
             if (infd != STDIN_FILENO)
             {
                 dup2(infd, STDIN_FILENO);
