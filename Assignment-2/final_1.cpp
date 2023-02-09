@@ -325,45 +325,148 @@ void handle_cd(command c)
         }
     }
 
-void handle_sb(command c)
-{
-    if(strcmp(c.args[1],"0")==0)
-        {
-            printf("0\n");
-            return;
-        }
-    char buf1[13];
-    char buf2[13];
-    char buf3[13];
-    char buf4[13];
-    char f_name[50];
-    int flag=0;
-    while(1)
-    {
-        bzero(buf1,13);
-        bzero(buf2,13);
-        bzero(buf3,13);
-        bzero(f_name,50);
-        if(flag==0)
-        {
-           sprintf(f_name,"/proc/%s/stat",c.args[1]);
-        //    printf("f_name si %s\n",f_name);
-           flag=1;
-        }
-        else sprintf(f_name,"/proc/%s/stat",buf4);
-        //printf("f_name si %s\n",f_name); 
-        FILE *f=fopen(f_name,"r");
-        bzero(buf4,13);
-        fscanf(f,"%s %s %s %s",buf1,buf2,buf3,buf4);
-        if(strcmp(buf4,"0")==0)
-        {
-            printf("0\n");
+int parent_pid(pid_t pid){
+    pid_t parent_pid;
+    char file[1024];
+    char buff[1024];
+
+    snprintf(file, sizeof(file), "/proc/%d/status", pid);
+
+    FILE *fp = fopen(file, "r");
+    if (fp==NULL) {
+        perror("fopen");
+        return 1;
+    }
+
+    while (fgets(buff, sizeof(buff), fp)) {
+        if (strncmp(buff, "PPid", 4) == 0) {
+            
+            char t[1024];
+            strcpy(t,buff+6);
+            parent_pid=atoi(t);
+            
             break;
         }
-        printf("%s\n",buf4);
     }
-    return;
 
+    fclose(fp);
+    return parent_pid;
+}
+
+int cpu_usage_time(pid_t pid){
+    char line[1024];
+    char file[1024];
+    sprintf(file, "/proc/%d/stat", pid);
+
+    FILE *fp = fopen(file, "r");
+    if (fp == NULL) {
+        perror("fopen");
+        return 1;
+    }
+    
+    if (fgets(line, sizeof(line), fp) == NULL) {
+        perror("Error reading file");
+        fclose(fp);
+        return 1;
+    }
+    fclose(fp);
+
+    int utime, stime;
+    sscanf(line, "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %d %d", &utime, &stime);
+    int total_time = utime + stime;
+    return total_time;
+}
+
+int detected_malware(pid_t pid){
+    int first=-1;
+    pid_t ppid=parent_pid(pid);
+    pid_t final_pid=pid;
+    int min_time=cpu_usage_time(pid);
+    while(ppid>=1){
+        //ppid=parent_pid(pid);
+        
+            int tp=cpu_usage_time(pid);
+            //int tpp=cpu_usage_time(final_pid);
+            //printf("PID: %d   Time: %d\n",pid,tp);
+            //printf("PPID: %d   Time: %d\n",ppid,tpp);
+            if(min_time>tp){
+                min_time=tp;
+                final_pid=pid;
+            }
+            pid=ppid;
+            ppid=parent_pid(ppid);
+    }
+
+    //printf("Detected malware pid:%d\n",pid);
+    pid_t pgid=getpgid(final_pid);
+    if(pgid==final_pid){
+        return final_pid;
+    }
+    else{
+        return first;
+    }
+}
+
+
+
+void handle_sb(command c)
+{
+    if(strcmp(c.args[1],"-suggest")==0){
+        pid_t pid=atoi(c.args[2]);
+        pid=detected_malware(pid);
+        if(pid==-1){
+            printf("No valid malware detected\n");
+        }
+        else{
+            printf("Detected malware pid:%d\n",pid);
+        }
+        return;
+    }
+    else{
+        if(strcmp(c.args[1],"0")==0)
+        {
+            printf("0\n");
+                return;
+        }
+        /*char buf1[13];
+        char buf2[13];
+        char buf3[13];
+        char buf4[13];
+        char f_name[50];
+        int flag=0;
+        while(1)
+        {
+            bzero(buf1,13);
+            bzero(buf2,13);
+            bzero(buf3,13);
+            bzero(f_name,50);
+            if(flag==0)
+            {
+                sprintf(f_name,"/proc/%s/stat",c.args[1]);
+        //    printf("f_name si %s\n",f_name);
+                flag=1;
+            }
+            else sprintf(f_name,"/proc/%s/stat",buf4);
+        //printf("f_name si %s\n",f_name); 
+            FILE *f=fopen(f_name,"r");
+            bzero(buf4,13);
+            fscanf(f,"%s %s %s %s",buf1,buf2,buf3,buf4);
+            if(strcmp(buf4,"0")==0)
+            {
+                printf("0\n");
+                break;
+            }
+            printf("%s\n",buf4);
+        }*/
+        pid_t pid=atoi(c.args[1]);
+        printf("Parent and Grandparent PIDS:\n");
+        while(pid>=0){
+            pid_t ppid=parent_pid(pid);
+            printf("%d\n",ppid);
+            pid=ppid;
+        }
+        return;
+    }
 }
 
 
