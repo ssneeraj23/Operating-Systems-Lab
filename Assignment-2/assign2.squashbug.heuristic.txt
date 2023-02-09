@@ -1,0 +1,26 @@
+SQUASHBUG HEURISTIC
+
+Malware has a general property of sleeping frequently and creating programs with high CPU utilization. We plan on exploiting this feature, in this heuristic. After the user has entered the process id (PID) of a suspicious process after running htop command, we use this PID to find its ancestors, which might have the actual malware. We traverse through every ancestor process’s CPU utilization time (using /proc/PID/status command, we get a file in which the 14th and 15th integer are the user time and kernel time respectively, and the sum of these 2 is the total time the particular process uses the CPU for ).  In comparison with the CPU time of the current PID, we find the process with minimum CPU time. This might be the potential malware since malware generally uses CPU for child process creation, hence having CPU time close to 0. After we get the malware program, we confirm our detection by checking if the Group PID (a common id given to a process and its descendants, and the main program starting all the child processes will have Group PID as its PID itself) is the same as its PID. If yes, we have found the malware.
+
+PSEUDO CODE:
+
+int first=-1; // a flag if we dont get a valid PID
+pid_t ppid=parent_pid(pid);  // using a user defined function to find the parent PID
+pid_t final_pid=pid;  // initializing the PID with the PID passed by user
+int min_time=cpu_usage_time(pid);  // iniltializing it with time using a user defined function to find
+while(ppid>=1){
+         int tp=cpu_usage_time(pid); // calculating every cpu time of process we traverse through
+         if(min_time>tp){ // finding the PID with the least time utilization
+                min_time=tp;
+                final_pid=pid;
+         }
+         pid=ppid; 
+         ppid=parent_pid(ppid); // updating the PID with the parent PID
+}
+pid_t pgid=getpgid(final_pid); // getting the group PID of the final PID process we obtained 
+if(pgid==final_pid){
+      return final_pid;
+}
+else{
+     return first; // sending -1 if an invalid PID is deduced
+}
