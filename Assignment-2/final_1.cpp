@@ -14,7 +14,7 @@
 #include<sys/types.h>
 #include<sys/stat.h>
 #include <fcntl.h> 
-
+#include <glob.h>
 
 
 //g++ -g final_1.cpp -lreadline
@@ -51,6 +51,57 @@ void sigintHandlerforz(int sig_num)
     return;
 }
 
+vector<string> get_all_matches(char *a)
+{
+    glob_t r;
+    vector<string> s;
+    glob(a,GLOB_TILDE,NULL,&r);
+    for(int i=0;i<r.gl_pathc;++i)s.push_back(r.gl_pathv[i]);
+    globfree(&r);
+    return s;
+}
+
+    
+
+command handle_wild_cards(command c)
+{
+    command f;
+    f.inredirect=c.inredirect;
+    f.outredirect=c.outredirect;
+    int i=1;
+    int j=1;
+    f.args[0]=c.args[0];
+    while(c.args[i]!=NULL)
+    {
+        if(!(strchr(c.args[i],'?')==NULL && strchr(c.args[i],'*')==NULL))
+        {
+              vector<string> s=get_all_matches(c.args[i]);
+              if(s.size()==0)
+              {
+                f.args[j]=c.args[i];
+                ++i;++j;
+              }
+              else
+              {
+                ++i;
+                 for(auto x:s)
+                 {
+                    
+                    f.args[j]=(char*)x.c_str();
+                    ++j;
+                 }
+              }
+        }
+        else
+        {
+            f.args[j]=c.args[i];
+                ++i;++j;
+        }
+
+    }
+    f.args[j]=NULL;
+    return f;
+}
 vector<command> get_Input(const char user_input[])
 {
     char *user_input_copy = strdup(user_input);
@@ -95,147 +146,8 @@ vector<command> get_Input(const char user_input[])
         if (cnt)
             vec.push_back(comm);
     }
+    for(auto &x:vec)x=handle_wild_cards(x);
     return vec;
-}
-
-void handle_delep(command c)
-{
-
-    int stat_loc;
-    pid_t child_pid;
-    char *choice;
-    char temp[200];
-    command new_command;
-    new_command.outredirect = new_command.inredirect = NULL;
-
-    // execute the "lsof -t FILE_PATH" command to know the processes which are using the file or have a lock on the file
-    new_command.args[0] = strdup("lsof");
-    new_command.args[1] = strdup("-t");
-    new_command.args[2] = strdup(c.args[1]);
-    new_command.args[3] = NULL;
-
-    // return if the file specified in the delep command does not exist
-    if (access(new_command.args[2], F_OK) != 0)
-    {
-        printf("delep: No such file exists \n");
-        return;
-    }
-
-    child_pid = fork();
-
-    if (child_pid == 0)
-    {
-        /* Never returns if the call is successful */
-        execvp(new_command.args[0], new_command.args);
-        exit(EXIT_FAILURE);
-    }
-    else
-    {
-        // should not wait if we running a program in background
-        waitpid(child_pid, &stat_loc, WUNTRACED);
-
-        // Reading the output PIDs on stdout using pipe and killing them
-        int pipefd[2];
-        if (pipe(pipefd) == -1)
-        {
-            perror("Pipe error: ");
-        }
-
-        pid_t pid = fork();
-
-        if (pid == 0)
-        {
-
-            close(pipefd[0]);
-            dup2(pipefd[1], STDOUT_FILENO);
-            close(pipefd[1]);
-            execvp(new_command.args[0], new_command.args);
-            exit(EXIT_FAILURE);
-        }
-        else
-        {
-
-            int proc_id;
-            int status;
-            char buf[8];
-            char result[33];
-            ssize_t nread;
-            int flag = 0;
-
-            waitpid(pid, &status, WUNTRACED);
-            close(pipefd[1]);
-
-            result[0] = '\0';
-            int prompt_flag = 0;
-
-            // Coverting the PID strings read from stdout to integers
-            while ((nread = read(pipefd[0], buf, sizeof(buf))) > 0)
-            {
-                flag = 0;
-                if (!prompt_flag)
-                {
-                    prompt_flag = 1;
-                    sprintf(temp, "The above process(es) are using this file or have a lock on it.\nDo you want to delete all the above process(es) and delete the file? [Y/n]: ");
-                    choice = readline(temp);
-                    if (*choice == 'n' || *choice == 'N' || !strcmp(choice, "No") || !strcmp(choice, "NO") || !strcmp(choice, "no") || !strcmp(choice, "nO"))
-                    {
-                        printf("Bye...\n");
-                        return;
-                    }
-                    else if (*choice == 'y' || *choice == 'Y' || !strcmp(choice, "yes") || !strcmp(choice, "Yes") || !strcmp(choice, "yEs") || !strcmp(choice, "yeS") || !strcmp(choice, "YEs") || !strcmp(choice, "yES") || !strcmp(choice, "YeS") || !strcmp(choice, "YES"))
-                    {
-                    }
-                    else
-                    {
-                        printf("Invalid Choice...\n"); // return if user enters invalid choice
-                        return;
-                    }
-                }
-
-                if (nread == sizeof(buf) && buf[nread - 1] != '\n')
-                    flag = 1;
-
-                // Killing all the processes one by one
-                for (int i = 0; i < nread; i++)
-                {
-                    if (buf[i] == '\n')
-                    {
-                        proc_id = atoi(result);
-                        if (kill(proc_id, SIGKILL) != 0)
-                        {
-                            perror("kill");
-                        }
-                        result[0] = '\0';
-                        if (*choice == 'n' or *choice == 'N')
-                        {
-                            printf("Bye\n");
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        char c[2];
-                        c[0] = buf[i];
-                        c[1] = '\0';
-                        strcat(result, c);
-                    }
-                }
-                if (!flag)
-                    result[0] = '\0';
-            }
-            close(pipefd[0]);
-            // Prints this if there is no process using the file or have a lock on it
-            if (nread == 0 & prompt_flag == 0)
-            {
-                printf("Currently no process is using the file or have a lock on it...\n");
-                return;
-            }
-        }
-
-        // Deleting the file using unlink function after killing all the processes using the file or have a lock on it
-        unlink(new_command.args[2]);
-        printf("The file is removed successfully..\n");
-    }
 }
 
 void handle_cd(command c)
@@ -320,7 +232,6 @@ void execprocess(const vector<command> &procs, int background)
     {
         if(strcmp(procs[i].args[0],"cd")==0){handle_cd(procs[i]);continue;}
         if(strcmp(procs[i].args[0],"sb")==0){handle_sb(procs[i]);continue;}
-	if(strcmp(procs[i].args[0], "delep")==0){handle_delep(procs[i]); continue;}
         int infd = STDIN_FILENO, outfd = STDOUT_FILENO;
         if (procs[i].inredirect != NULL)
         {
