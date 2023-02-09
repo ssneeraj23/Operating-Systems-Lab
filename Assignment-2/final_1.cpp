@@ -17,6 +17,7 @@
 #include <glob.h>
 
 
+
 //g++ -g final_1.cpp -lreadline
 
 using namespace std;
@@ -24,6 +25,11 @@ using namespace std;
 // Parsing Input Command
 int child_to_kill=-1;
 int command_count=0;
+vector<string>history;
+int histindex=0;
+char* pres_text;
+
+
 struct command
 {
     char *args[128];
@@ -50,6 +56,38 @@ void sigintHandlerforz(int sig_num)
     child_to_kill=-1;
     return;
 }
+
+
+int uparrow(int count,int key){
+  if(histindex+1==history.size())pres_text=rl_line_buffer;
+  if(histindex==0)return 0;
+  if(histindex>=0)
+  {
+  rl_replace_line(history[histindex].c_str(),0);
+  rl_redisplay();
+  rl_end_of_line(count,key);
+  histindex--;
+  }
+  return 0;
+}
+
+int downarrow(int count,int key) {
+  if(histindex<history.size()-1)
+  {
+   histindex++;
+   rl_replace_line(history[histindex].c_str(),0);
+   rl_redisplay();
+   rl_end_of_line(count,key);
+  }
+  else{
+    rl_replace_line(pres_text,0);
+    rl_redisplay();
+    rl_end_of_line(count,key);
+  }
+  return 0;
+}
+
+ 
 
 
 vector<string> get_all_matches(char *a)
@@ -428,45 +466,39 @@ void handle_sb(command c)
             printf("0\n");
                 return;
         }
-        /*char buf1[13];
-        char buf2[13];
-        char buf3[13];
-        char buf4[13];
-        char f_name[50];
-        int flag=0;
-        while(1)
+         char buf1[13];
+    char buf2[13];
+    char buf3[13];
+    char buf4[13];
+    char f_name[50];
+    int flag=0;
+    while(1)
+    {
+        bzero(buf1,13);
+        bzero(buf2,13);
+        bzero(buf3,13);
+        bzero(f_name,50);
+        if(flag==0)
         {
-            bzero(buf1,13);
-            bzero(buf2,13);
-            bzero(buf3,13);
-            bzero(f_name,50);
-            if(flag==0)
-            {
-                sprintf(f_name,"/proc/%s/stat",c.args[1]);
+           sprintf(f_name,"/proc/%s/stat",c.args[1]);
         //    printf("f_name si %s\n",f_name);
-                flag=1;
-            }
-            else sprintf(f_name,"/proc/%s/stat",buf4);
-        //printf("f_name si %s\n",f_name); 
-            FILE *f=fopen(f_name,"r");
-            bzero(buf4,13);
-            fscanf(f,"%s %s %s %s",buf1,buf2,buf3,buf4);
-            if(strcmp(buf4,"0")==0)
-            {
-                printf("0\n");
-                break;
-            }
-            printf("%s\n",buf4);
-        }*/
-        pid_t pid=atoi(c.args[1]);
-        printf("Parent and Grandparent PIDS:\n");
-        while(pid>=0){
-            pid_t ppid=parent_pid(pid);
-            printf("%d\n",ppid);
-            pid=ppid;
+           flag=1;
         }
-        return;
+        else sprintf(f_name,"/proc/%s/stat",buf4);
+        //printf("f_name si %s\n",f_name); 
+        FILE *f=fopen(f_name,"r");
+        bzero(buf4,13);
+        fscanf(f,"%s %s %s %s",buf1,buf2,buf3,buf4);
+        if(strcmp(buf4,"0")==0)
+        {
+            printf("0\n");
+            break;
+        }
+        printf("%s\n",buf4);
     }
+    return;
+}
+  return;
 }
 
 
@@ -536,13 +568,24 @@ int main()
         signal(SIGTSTP, sigintHandlerforz);
         rl_bind_keyseq("\001",rl_beg_of_line);
         rl_bind_keyseq("\005",rl_end_of_line);
+        rl_bind_keyseq("\033[A", uparrow);
+    	rl_bind_keyseq("\033[B", downarrow);
         vector <command> v;
         char *input;
         pid_t child_pid;
         char direc[1024];
         char temp1[1080];
+        history.clear();
+        string str;
+        ifstream is("history.txt");
+        while(getline(is, str))
+        {
+            history.push_back(str);
+        }
         int background;
         int last;
+        ofstream my_file;
+	    my_file.open("history.txt", ios::ios_base::app);
         while (1)
         {
             background=0;
@@ -553,6 +596,17 @@ int main()
             char temp[1024];
             strcpy(temp, input);
             v = get_Input(temp);
+            history.push_back(temp);
+            histindex=history.size()-1;
+            if(!my_file)
+            {
+                cout<<"history.txt file not found"<<endl;
+            }
+            else
+            {
+                my_file<<input;
+                my_file<<endl;
+            }
             if (v.size()==0)
             { /* Handle empty commands */
                 free(input);
