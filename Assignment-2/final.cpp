@@ -14,6 +14,7 @@
 #include <glob.h>
 using namespace std;
 vector<string>history;
+vector<pid_t>child_pids;
 int histindex=0;
 int rootlen;
 string s;
@@ -242,6 +243,7 @@ void execprocess(const vector<command> &procs, int background)
             outfd = pipefd[1];
         }
         pid_t child_pid = fork();
+        child_pids.push_back(child_pid);
         int stat_loc;
         if (child_pid == 0)
         {
@@ -268,13 +270,11 @@ void execprocess(const vector<command> &procs, int background)
 
 void SIGINT_handler(int signum)
 {
-	signal(SIGINT,handler_sigint);
+	signal(SIGINT,SIGINT_handler);
 	for(auto& x:child_pids)
 	{
 		kill(x,9);
-		cout<<"killing pid"<<x<<"\n";
 	}
-	cout<<"Done!\n";
 	child_pids.clear();
 	fflush(stdout);
 }
