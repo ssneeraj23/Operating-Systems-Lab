@@ -5,9 +5,11 @@
 #include <stdio.h>
 #include<unistd.h>
 #include<bits/stdc++.h>
+
 using namespace std;
 #define max_nodes 10000
 #define max_edges 1000000
+
 typedef struct node 
 {
     int vertex;
@@ -75,10 +77,16 @@ int main()
     //     cout<<s->vertex<<endl;
     //     s=s->next;
     // }
+    int shmid_nodes = shmget(IPC_PRIVATE,max_nodes*sizeof(g_node) , 0666 | IPC_CREAT);
+    g_node *start_node = (g_node *)shmat(shmid_nodes, (void *)0, 0);
+    for(int i=0;i<max_nodes;++i)start_node[i]=all_nodes[i];
+
     if(fork()==0)
     {
         cout<<"I am the child\n";
+        g_node *start_node = (g_node *)shmat(shmid_nodes, (void *)0, 0);
         node *ptr=(node *)shmat(shmid, (void *)0, 0);
+        ptr=start_node[4038].head;
         while(ptr!=NULL)
         {
             cout<<ptr->vertex<<endl;
