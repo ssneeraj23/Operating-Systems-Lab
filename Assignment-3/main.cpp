@@ -8,6 +8,7 @@
 #include <random>
 #include <sys/wait.h>
 using namespace std;
+
 #define max_nodes 10000
 #define max_edges 1000000
 
@@ -81,9 +82,6 @@ int main()
     while (fscanf(f, "%d %d", &n1, &n2) > 0)
 	{
         ++k;
-        // if(k<100000)cout<<k<<endl;
-        // else break;
-		//printf("%d %d\n", n1, n2);
 		if(all_nodes[n1].head==NULL)
         {
             temp.vertex=n1;
@@ -122,18 +120,20 @@ int main()
     temp.next=NULL;
     *ptr=temp;
     ++ptr;
-    // node *s=all_nodes[4031].head;
-    // while(s!=NULL)
-    // {                                           //This is doing its job as expected :)
-    //     cout<<s->vertex<<endl;
-    //     s=s->next;
-    // }
     int shmid_nodes = shmget(IPC_PRIVATE,max_nodes*sizeof(g_node) , 0666 | IPC_CREAT);
     g_node *start_node = (g_node *)shmat(shmid_nodes, (void *)0, 0);
     for(int i=0;i<max_nodes;++i)start_node[i]=all_nodes[i];
     int pid;
+
+
+    //using key shmid_nodes gives a segment having array of g_nodes
+    //used key shmid gives a segment having the graph i.e linked list of nodes
+
+
+
     if((pid=fork())==0)
     {
+
         cout<<"I am the producer\n";
         g_node *start_node = (g_node *)shmat(shmid_nodes, (void *)0, 0);
         node *ptr=(node *)shmat(shmid, (void *)0, 0);
@@ -162,12 +162,13 @@ int main()
            cout<<"m is "<<m<<endl;
            for(int i=0;i<m;++i)
            {
-            cout<<"In for loop\n";
+            cout<<"In for loop for adding edges\n";
              ptr=add_edges(num_nodes-m+i,ptr,start_node);
              
            }
            
            node *tt=gt[num_nodes-1].head;
+           cout<< "the nodes connected to "<<num_nodes-1<<" are\n";
            while(tt!=NULL)
            {
             cout<<tt->vertex<<endl;
@@ -177,6 +178,8 @@ int main()
         }
         
     }
+
+
     wait(NULL);
 	shmdt(ptr);
 	shmctl(shmid,IPC_RMID,NULL);
