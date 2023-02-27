@@ -145,7 +145,7 @@ int main()
     g_node all_nodes[max_nodes];
     int n1;
     int n2;
-    FILE *f = fopen("nodes.txt", "r");
+    FILE *f = fopen("facebook_combined.txt", "r");
     int k = 0;
     while (fscanf(f, "%d %d", &n1, &n2) > 0)
     {
