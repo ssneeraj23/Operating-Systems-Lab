@@ -24,7 +24,7 @@ typedef struct g_node
     int degree = 0;
 } g_node;
 
-void djikstra(g_node *gt, int v, int s, int d, FILE *f) // finds the shortest path between 2 given nodes
+void djikstra(g_node *gt, int v, int s, FILE *f) // finds the shortest path between 2 given nodes
 {
     int distance[v];
     int seen[v];
@@ -61,23 +61,30 @@ void djikstra(g_node *gt, int v, int s, int d, FILE *f) // finds the shortest pa
             ptr = ptr->next;
         }
     }
-    vector<int> path;
-    if (parent[d] == -1)
-        return;
-    for (int v = d; v != -1; v = parent[v])
+    for (int d = 0; d < v; ++d)
     {
-        path.push_back(v);
+
+        vector<int> path;
+        if(d==s){
+            continue;
+        }
+        if (parent[d] == -1)
+            break;
+        for (int v = d; v != -1; v = parent[v])
+        {
+            path.push_back(v);
+        }
+        reverse(path.begin(), path.end());
+        // string filename = "output" + to_string(s % 10) + ".txt";
+        // FILE * f = fopen(filename, "a");
+        for (int i = 0; i < path.size(); i++)
+        {
+            // cout << path[i] << " ";
+            fprintf(f, "%d ", path[i]);
+        }
+        // cout << "\n";
+        fprintf(f, "\n");
     }
-    reverse(path.begin(), path.end());
-    // string filename = "output" + to_string(s % 10) + ".txt";
-    // FILE * f = fopen(filename, "a");
-    for (int i = 0; i < path.size(); i++)
-    {
-        // cout << path[i] << " ";
-        fprintf(f, "%d ", path[i]);
-    }
-    // cout << "\n";
-    fprintf(f, "\n");
     // fclose(f);
 }
 void consumer(g_node *start_node, int count_nodes, int k, FILE *f)
@@ -85,10 +92,11 @@ void consumer(g_node *start_node, int count_nodes, int k, FILE *f)
 
     for (int i = k; i < count_nodes; i += 10)
     {
-        for (int j = 0; j < count_nodes; j++)
+        /*for (int j = 0; j < count_nodes; j++)
         {
             djikstra(start_node, count_nodes, i, j, f); // calls djikstra for source node num i and destination node num j
-        }
+        }*/
+        djikstra(start_node, count_nodes, i, f); // calls djikstra for source node num i and all possible destinations
     }
 
     // fprintf(f, "\n");
@@ -197,52 +205,52 @@ int main()
     // using key shmid_nodes gives a segment having array of g_nodes
     // used key shmid gives a segment having the graph i.e linked list of nodes
 
-    if((pid=fork())==0)
+    if ((pid = fork()) == 0)
     {
 
-        cout<<"I am the producer\n";
+        cout << "I am the producer\n";
         g_node *start_node = (g_node *)shmat(shmid_nodes, (void *)0, 0);
-        node *ptr=(node *)shmat(shmid, (void *)0, 0);
-        int num_nodes=0;
-        g_node *gt=start_node;
-        while(gt[num_nodes].head!=NULL)++num_nodes;
-        node *start=ptr;
-        while(ptr->vertex!=-1)++ptr;
-        cout<<ptr->vertex<<endl;
-        cout<<"Num nodes are "<<num_nodes<<endl;
+        node *ptr = (node *)shmat(shmid, (void *)0, 0);
+        int num_nodes = 0;
+        g_node *gt = start_node;
+        while (gt[num_nodes].head != NULL)
+            ++num_nodes;
+        node *start = ptr;
+        while (ptr->vertex != -1)
+            ++ptr;
+        cout << ptr->vertex << endl;
+        cout << "Num nodes are " << num_nodes << endl;
         node temp;
         int m;
-        while(1)
+        while (1)
         {
-           m = (rand() %(30 - 10 + 1)) + 10;
-           for(int i=0;i<m;++i)
-           {
-               temp.vertex=num_nodes+i;
-               temp.next=NULL;
-               *ptr=temp;
-               gt[num_nodes+i].head=ptr;
-               gt[num_nodes+i].tail=ptr;
-               ++ptr;
-           }
-           num_nodes+=m;
-           cout<<"m is "<<m<<endl;
-           for(int i=0;i<m;++i)
-           {
-            cout<<"In for loop for adding edges\n";
-             ptr=add_edges(num_nodes-m+i,ptr,start_node);
+            m = (rand() % (30 - 10 + 1)) + 10;
+            for (int i = 0; i < m; ++i)
+            {
+                temp.vertex = num_nodes + i;
+                temp.next = NULL;
+                *ptr = temp;
+                gt[num_nodes + i].head = ptr;
+                gt[num_nodes + i].tail = ptr;
+                ++ptr;
+            }
+            num_nodes += m;
+            cout << "m is " << m << endl;
+            for (int i = 0; i < m; ++i)
+            {
+                cout << "In for loop for adding edges\n";
+                ptr = add_edges(num_nodes - m + i, ptr, start_node);
+            }
 
-           }
-
-           node *tt=gt[num_nodes-1].head;
-           cout<< "the nodes connected to "<<num_nodes-1<<" are\n";
-           while(tt!=NULL)
-           {
-            cout<<tt->vertex<<endl;
-            tt=tt->next;
-           }
-           sleep(50);
+            node *tt = gt[num_nodes - 1].head;
+            cout << "the nodes connected to " << num_nodes - 1 << " are\n";
+            while (tt != NULL)
+            {
+                cout << tt->vertex << endl;
+                tt = tt->next;
+            }
+            sleep(50);
         }
-
     }
     ////////////////////////////////////////// CONSUMER //////////////////////////////////////////
     if ((pid = fork()) == 0)
@@ -254,11 +262,11 @@ int main()
             node *ptr = (node *)shmat(shmid, (void *)0, 0);
             int count_nodes = 0;
             g_node *gt = start_node;
-            while (gt[count_nodes].head != NULL)  // to count the number of nodes
+            while (gt[count_nodes].head != NULL) // to count the number of nodes
                 ++count_nodes;
-            FILE *fp = fopen("output0.txt", "w"); // opens up the file in which we have to append the paths
+            FILE *fp = fopen("output0.txt", "w");     // opens up the file in which we have to append the paths
             consumer(start_node, count_nodes, 0, fp); // calls consumer function
-            fclose(fp); 
+            fclose(fp);
             sleep(30);
         }
     }
