@@ -1,0 +1,19 @@
+load the graph
+compute the degree of all the nodes
+is the max size for wall queue specific to a node or same for every node
+actions should printed based on priority for the node
+---hint 
+    priority queue (credits:mohan)
+constraints:
+    adding and removing elements should be done atomically
+
+to be done:
+    find all the race conditions to be taken care of 
+    have a dry run on a paper
+    learn about locks and semaphores (only for me)
+    find the solutions for them
+    when to update log
+    innovate appropriate DS
+    Distribute work
+    happy coding
+
