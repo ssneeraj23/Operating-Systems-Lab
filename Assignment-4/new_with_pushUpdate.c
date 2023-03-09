@@ -61,7 +61,7 @@ void pushUpdate()
         if(is_queue_updated())
         {
             
-            //pthread_mutex_lock(&mutex);
+            pthread_mutex_lock(&mutex);
             // push action of a node into all its neighbours
             for(auto i: monitor)
             {
@@ -75,7 +75,7 @@ void pushUpdate()
                 monitor.pop();
             }
             
-            //pthread_mutex_unlock(&mutex);
+            pthread_mutex_unlock(&mutex);
         }
     }
 }
