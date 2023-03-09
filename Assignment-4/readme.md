@@ -1,1 +1,1 @@
-# This is about using threads for effiecient processing.
+# This is about using threads for efficient processing.
