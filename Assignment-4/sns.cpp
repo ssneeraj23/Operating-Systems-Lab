@@ -11,7 +11,8 @@
 
 using namespace std;
 
-#define node_cnt 500
+#define node_cnt 37700
+#define file_name "musae_git_edges.csv"
 
 pthread_mutex_t mutex_log = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_monitor = PTHREAD_MUTEX_INITIALIZER;
@@ -24,7 +25,6 @@ pthread_mutex_t feed_locks[node_cnt];
 
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER; // monitor queue pushing
 pthread_cond_t cond_read = PTHREAD_COND_INITIALIZER;
-
 
 typedef struct action
 {
@@ -186,8 +186,8 @@ void *user_sim(void *arg)
 
                 // lock the file
                 pthread_mutex_lock(&mutex_log);
-                fprintf(log_file, "UserID: %d action_id: %d action_type: %s timestamp: %s", x, temp.action_id, atype.c_str(), ctime(&temp.timestamp));
-                // printf("UserID: %d action_id: %d action_type: %s timestamp: ",x,temp.action_id,atype,ctime(&temp.timestamp));
+                fprintf(log_file, "UserID: %d action_id: %d action_type: \"%s\" timestamp: %s", x, temp.action_id, atype.c_str(), ctime(&temp.timestamp));
+                // printf("UserID: %d action_id: %d action_type: \"%s\"" timestamp: ",x,temp.action_id,atype,ctime(&temp.timestamp));
                 pthread_mutex_unlock(&mutex_log);
 
                 // lock
@@ -210,6 +210,7 @@ void *user_sim(void *arg)
 // pushUpdate threads
 void *pushUpdate(void *arg)
 {
+    string at;
     while (true)
     {
         action i;
@@ -240,8 +241,12 @@ void *pushUpdate(void *arg)
             {
                 // if node of id i.user_id has priority bit 1, then chrono_compare else priority_compare
                 if (all_nodes[j].priority == 1)
+                {
                     pthread_mutex_lock(&feed_locks[j]);
+                    temp.p = get_num_comm_neigh(j, i.action_id, common_neigh);
+                }
                 all_nodes[j].feed.push(temp);
+                temp.p = -1;
                 --all_nodes[j].new_actions;
                 if (all_nodes[j].priority == 0)
                 {
@@ -261,9 +266,15 @@ void *pushUpdate(void *arg)
                     }
                 }
                 pthread_mutex_unlock(&feed_locks[j]);
-                printf("Pushed action %d of user %d into feed queue of user %d\n", temp.action_id, temp.user_id, j);
+                if (temp.action_type == 0)
+                    at = "like";
+                else if (temp.action_type == 1)
+                    at = "post";
+                else
+                    at = "comment";
+                printf("Pushed action %d of type \"%s\" of user %d into feed queue of user %d\n", temp.action_id, at.c_str(), temp.user_id, j);
                 pthread_mutex_lock(&mutex_log);
-                fprintf(log_file, "Pushed action %d of user %d into feed queue of user %d\n", temp.action_id, temp.user_id, j);
+                fprintf(log_file, "Pushed action %d of type \"%s\"of user %d into feed queue of user %d\n", temp.action_id, at.c_str(), temp.user_id, j);
                 pthread_mutex_unlock(&mutex_log);
             }
         }
@@ -274,44 +285,55 @@ void *pushUpdate(void *arg)
     return NULL;
 }
 
-
 // readpost threads
-void* readPost(void* arg){
-       while(true){
+void *readPost(void *arg)
+{
+    string at;
+    while (true)
+    {
         int i;
         int flag = 0;
         pthread_mutex_lock(&mutex3);
-        pthread_cond_wait(&cond_read, &mutex3); // to signal that some node's feedqueue has been updated 
-
+        pthread_cond_wait(&cond_read, &mutex3); // to signal that some node's feedqueue has been updated
         pthread_mutex_lock(&mutex_readq); // to make the pop operation atomic
         if (!read_q.empty())
         {
-            flag=1; // indicates that something has been popped out of read queue
+            flag = 1; // indicates that something has been popped out of read queue
             i = read_q.front();
             read_q.pop();
         }
         pthread_mutex_unlock(&mutex_readq);
 
-        if(flag == 1){
-           pthread_mutex_lock(&feed_locks[i]);
-           while(!(all_nodes[i].feed).empty()){
-             action temp = (all_nodes[i].feed).top();
-             printf("I read action number %d of type %d posted by user %d at time %s\n",temp.action_id,temp.action_type,temp.user_id,ctime(&(temp.timestamp)));
-             fprintf(log_file, "I read action number %d of type %d posted by user %d at time %s\n",temp.action_id,temp.action_type,temp.user_id,ctime(&(temp.timestamp)));
-             (all_nodes[i].feed).pop();
-           }
-           pthread_mutex_unlock(&feed_locks[i]);
+        if (flag == 1)
+        {
+            pthread_mutex_lock(&feed_locks[i]);
+            while (!(all_nodes[i].feed).empty())
+            {
+                action temp = (all_nodes[i].feed).top();
+                if (temp.action_type == 0)
+                    at = "like";
+                else if (temp.action_type == 1)
+                    at = "post";
+                else
+                    at = "comment";
+                printf("I Read action number %d of type \"%s\" posted by user %d at time %s", temp.action_id, at.c_str(), temp.user_id, ctime(&(temp.timestamp)));
+                pthread_mutex_lock(&mutex_log);
+                fprintf(log_file, "I Read action number %d of type \"%s\" posted by user %d at time %s", temp.action_id, at.c_str(), temp.user_id, ctime(&(temp.timestamp)));
+                pthread_mutex_unlock(&mutex_log);
+                (all_nodes[i].feed).pop();
+            }
+            pthread_mutex_unlock(&feed_locks[i]);
         }
         pthread_mutex_unlock(&mutex3);
-      }
-      return NULL; 
+    }
+    return NULL;
 }
 
 int main()
 {
     int pos, n1, n2;
     string line;
-    ifstream inFile("temp.txt");
+    ifstream inFile(file_name);
     getline(inFile, line);
     for (int i = 0; i < node_cnt; ++i)
     {
@@ -374,7 +396,7 @@ int main()
     }
     for (int i = 0; i < 10; i++)
     {
-        pthread_join(read_post[i],NULL);
+        pthread_join(read_post[i], NULL);
     }
     pthread_join(us_sim_thrd, NULL);
     return 0;
