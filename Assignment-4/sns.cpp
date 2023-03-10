@@ -15,10 +15,15 @@ using namespace std;
 
 pthread_mutex_t mutex_log = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_monitor = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_readq = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER; // monitor queue pushing
+pthread_cond_t cond_read = PTHREAD_COND_INITIALIZER; 
+pthread_mutex_t feed_locks[node_cnt];
+
+
 
 typedef struct action
 {
@@ -64,6 +69,7 @@ typedef struct node
 vector<vector<int>> adj(node_cnt);
 vector<node> all_nodes(node_cnt);
 vector<vector<int>> common_neigh(node_cnt);
+queue<int> read_q;
 queue<action> monitor;
 FILE *log_file = fopen("sns.log", "w");
 
@@ -96,7 +102,6 @@ int get_num_comm_neigh(int a, int b, vector<vector<int>> &g)
 // pushUpdate threads
 void* pushUpdate(void *arg)
 {
-    cout<<"inside pushupdate\n";
     while (true)
     {
         action i;
@@ -106,30 +111,43 @@ void* pushUpdate(void *arg)
         pthread_cond_wait(&cond, &mutex2); // to signal that monitor queue has been updated
 
         pthread_mutex_lock(&mutex_monitor); // to make the pop operation atomic
+
         if (!monitor.empty())
         {
             flag=1; // indicates that something has been popped out of monitor queue
             i = monitor.front();
             monitor.pop();
         }
+        for(auto x:adj[i.user_id])
+        {
+            if(all_nodes[x].priority==0)
+            pthread_mutex_lock(&feed_locks[x]);
+        }
         pthread_mutex_unlock(&mutex_monitor);
 
-        pthread_mutex_lock(&mutex1); // to make adding actions into the feed_queue of neighbours atomic
         if (flag == 1)
         {
             action temp = i;
             for (auto j : adj[i.user_id])
             {
                 // if node of id i.user_id has priority bit 1, then chrono_compare else priority_compare
+                if(all_nodes[j].priority==1) pthread_mutex_lock(&feed_locks[j]);
                 all_nodes[j].feed.push(temp);
-                
+                if(all_nodes[j].priority==0)
+                {
+                    pthread_mutex_lock(&mutex_readq);
+                    read_q.push(j);
+                    pthread_cond_broadcast(&cond_read);
+                    pthread_mutex_unlock(&mutex_readq);
+                }
+                pthread_mutex_unlock(&feed_locks[j]);
                 printf("Pushed action %d of user %d into feed queue of user %d\n", temp.action_id, temp.user_id, j);
+                pthread_mutex_lock(&mutex_log);
                 fprintf(log_file, "Pushed action %d of user %d into feed queue of user %d\n", temp.action_id, temp.user_id, j);
+                pthread_mutex_unlock(&mutex_log);
             }
         }
         // if time priority we can immediately signal else wait for all actions of a particular node to be pushed into feed queues
-
-        pthread_mutex_unlock(&mutex1);
 
         pthread_mutex_unlock(&mutex2);
     }
@@ -233,7 +251,10 @@ int main()
     string line;
     ifstream inFile("temp.txt");
     getline(inFile, line);
-
+    for(int i=0;i<node_cnt;++i)
+    {
+        feed_locks[i]=PTHREAD_MUTEX_INITIALIZER;
+    }
     // Loading the graph
     while (getline(inFile, line))
     {
