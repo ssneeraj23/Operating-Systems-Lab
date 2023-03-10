@@ -19,11 +19,9 @@ pthread_mutex_t mutex_readq = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;          // monitor queue pushing
-pthread_cond_t cond_read = PTHREAD_COND_INITIALIZER; 
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER; // monitor queue pushing
+pthread_cond_t cond_read = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t feed_locks[node_cnt];
-
-
 
 typedef struct action
 {
@@ -61,7 +59,7 @@ typedef struct node
     int like_cnt = 1;
     int post_cnt = 1;
     int comment_cnt = 1;
-    int new_actions=0;
+    int new_actions = 0;
 
 } node;
 
@@ -101,7 +99,7 @@ int get_num_comm_neigh(int a, int b, vector<vector<int>> &g)
     return g[a][b - a];
 }
 // pushUpdate threads
-void* pushUpdate(void *arg)
+void *pushUpdate(void *arg)
 {
     while (true)
     {
@@ -115,14 +113,14 @@ void* pushUpdate(void *arg)
 
         if (!monitor.empty())
         {
-            flag=1; // indicates that something has been popped out of monitor queue
+            flag = 1; // indicates that something has been popped out of monitor queue
             i = monitor.front();
             monitor.pop();
         }
-        for(auto x:adj[i.user_id])
+        for (auto x : adj[i.user_id])
         {
-            if(all_nodes[x].priority==0)
-            pthread_mutex_lock(&feed_locks[x]);
+            if (all_nodes[x].priority == 0)
+                pthread_mutex_lock(&feed_locks[x]);
         }
         pthread_mutex_unlock(&mutex_monitor);
 
@@ -132,14 +130,26 @@ void* pushUpdate(void *arg)
             for (auto j : adj[i.user_id])
             {
                 // if node of id i.user_id has priority bit 1, then chrono_compare else priority_compare
-                if(all_nodes[j].priority==1) pthread_mutex_lock(&feed_locks[j]);
+                if (all_nodes[j].priority == 1)
+                    pthread_mutex_lock(&feed_locks[j]);
                 all_nodes[j].feed.push(temp);
-                if(all_nodes[j].priority==0)
+                --all_nodes[j].new_actions;
+                if (all_nodes[j].priority == 0)
                 {
                     pthread_mutex_lock(&mutex_readq);
                     read_q.push(j);
                     pthread_cond_broadcast(&cond_read);
                     pthread_mutex_unlock(&mutex_readq);
+                }
+                else
+                {
+                    if (all_nodes[j].new_actions == 0)
+                    {
+                        pthread_mutex_lock(&mutex_readq);
+                        read_q.push(j);
+                        pthread_cond_broadcast(&cond_read);
+                        pthread_mutex_unlock(&mutex_readq);
+                    }
                 }
                 pthread_mutex_unlock(&feed_locks[j]);
                 printf("Pushed action %d of user %d into feed queue of user %d\n", temp.action_id, temp.user_id, j);
@@ -191,11 +201,11 @@ void *user_sim(void *arg)
             else
                 actions = (int)(10.0 * (1.0 + log2(adj[x].size())));
 
-            //updating no of actions
-            for(auto y:adj[x])
+            // updating no of actions
+            for (auto y : adj[x])
             {
                 pthread_mutex_lock(&feed_locks[y]);
-                all_nodes[y].new_actions+=actions;
+                all_nodes[y].new_actions += actions;
                 pthread_mutex_unlock(&feed_locks[y]);
             }
             pthread_mutex_lock(&mutex_log);
@@ -265,9 +275,9 @@ int main()
     string line;
     ifstream inFile("temp.txt");
     getline(inFile, line);
-    for(int i=0;i<node_cnt;++i)
+    for (int i = 0; i < node_cnt; ++i)
     {
-        feed_locks[i]=PTHREAD_MUTEX_INITIALIZER;
+        feed_locks[i] = PTHREAD_MUTEX_INITIALIZER;
     }
     // Loading the graph
     while (getline(inFile, line))
@@ -310,17 +320,14 @@ int main()
     pthread_t push_update[25];
     for (int i = 0; i < 25; i++)
     {
-        pthread_create(push_update+i, NULL, pushUpdate, NULL);
+        pthread_create(push_update + i, NULL, pushUpdate, NULL);
     }
 
-
-
-
-    //To be at the end
+    // To be at the end
     for (int i = 0; i < 25; i++)
     {
-        pthread_join(push_update[i],NULL);
+        pthread_join(push_update[i], NULL);
     }
-     pthread_join(us_sim_thrd, NULL);
+    pthread_join(us_sim_thrd, NULL);
     return 0;
 }
