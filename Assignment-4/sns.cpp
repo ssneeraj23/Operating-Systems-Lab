@@ -19,7 +19,7 @@ pthread_mutex_t mutex_readq = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER; // monitor queue pushing
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;          // monitor queue pushing
 pthread_cond_t cond_read = PTHREAD_COND_INITIALIZER; 
 pthread_mutex_t feed_locks[node_cnt];
 
@@ -61,6 +61,7 @@ typedef struct node
     int like_cnt = 1;
     int post_cnt = 1;
     int comment_cnt = 1;
+    int new_actions=0;
 
 } node;
 
@@ -173,6 +174,7 @@ void *user_sim(void *arg)
         {
             generated.push_back(x);
         }
+        pthread_mutex_lock(&mutex_log);
         fprintf(log_file, "The random nodes that are selected are\n");
         printf("The random nodes that are selected are\n");
         for (auto x : generated_set)
@@ -180,6 +182,7 @@ void *user_sim(void *arg)
             fprintf(log_file, "%d\n", x);
             printf("%d\n", x);
         }
+        pthread_mutex_unlock(&mutex_log);
         for (auto x : generated)
         {
             int actions;
@@ -187,8 +190,18 @@ void *user_sim(void *arg)
                 actions = 1;
             else
                 actions = (int)(10.0 * (1.0 + log2(adj[x].size())));
+
+            //updating no of actions
+            for(auto y:adj[x])
+            {
+                pthread_mutex_lock(&feed_locks[y]);
+                all_nodes[y].new_actions+=actions;
+                pthread_mutex_unlock(&feed_locks[y]);
+            }
+            pthread_mutex_lock(&mutex_log);
             fprintf(log_file, "NodeID : %d   No of Actions generated : %d  Degree : %d\n", x, actions, (int)adj[x].size());
             fprintf(log_file, "The actions generated are \n");
+            pthread_mutex_unlock(&mutex_log);
             printf("NodeID : %d   No of Actions generated : %d  Degree : %d\n", x, actions, (int)adj[x].size());
             // printf("The actions generated are \n");
             int id1, id2, id3;
@@ -223,6 +236,7 @@ void *user_sim(void *arg)
                         atype = "comment";
                     }
                 }
+
                 // lock the file
                 pthread_mutex_lock(&mutex_log);
                 fprintf(log_file, "UserID: %d action_id: %d action_type: %s timestamp: %s", x, temp.action_id, atype.c_str(), ctime(&temp.timestamp));
@@ -296,7 +310,7 @@ int main()
     pthread_t push_update[25];
     for (int i = 0; i < 25; i++)
     {
-        pthread_create(push_update, NULL, pushUpdate, NULL);
+        pthread_create(push_update+i, NULL, pushUpdate, NULL);
     }
 
 
