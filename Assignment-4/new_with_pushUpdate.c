@@ -2,6 +2,11 @@
 #include <bits/stdc++.h>
 #include <stdlib.h>
 #include <cstring>
+#include <pthread.h>
+#include <unistd.h>
+#include <time.h>
+#include<stdio.h>
+
 using namespace std;
 int n=37700;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -51,9 +56,12 @@ int is_queue_updated()
         flag_to_indicate_queue_update = 0;
         return 1;
     }
+    else{
+        return 0;
+    }
 }
 
-void pushUpdate()
+void* pushUpdate(void* arg)
 {
     while(true)
     {
@@ -61,21 +69,24 @@ void pushUpdate()
         if(is_queue_updated())
         {
             
-            pthread_mutex_lock(&mutex);
+            //pthread_mutex_lock(&mutex);
             // push action of a node into all its neighbours
-            for(auto i: monitor)
+            
+            while(!monitor.empty())
             {
+                auto i= monitor.front();
+                action temp = i;
                 for(auto j: adj[i.user_id])
                 {
-                    feed_queue[j].push(i);
-                    printf("Pushed action %d of user %d into feed queue of user %d",i.action_id,i.user_id,j);
-                    fprintf(log_file,"Pushed action %d of user %d into feed queue of user %d",i.action_id,i.user_id,j);
+                    feed_queue[j].push(temp);
+                    printf("Pushed action %d of user %d into feed queue of user %d",temp.action_id,temp.user_id,j);
+                    fprintf(log_file,"Pushed action %d of user %d into feed queue of user %d",temp.action_id,temp.user_id,j);
                 }
                 // poping the action from the monitor queue once its been entered into all the feed queues
                 monitor.pop();
             }
             
-            pthread_mutex_unlock(&mutex);
+            //pthread_mutex_unlock(&mutex);
         }
     }
 }
