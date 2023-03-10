@@ -19,9 +19,12 @@ pthread_mutex_t mutex_readq = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex3 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t feed_locks[node_cnt];
+
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER; // monitor queue pushing
 pthread_cond_t cond_read = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t feed_locks[node_cnt];
+
 
 typedef struct action
 {
@@ -98,74 +101,8 @@ int get_num_comm_neigh(int a, int b, vector<vector<int>> &g)
         swap(a, b);
     return g[a][b - a];
 }
-// pushUpdate threads
-void *pushUpdate(void *arg)
-{
-    while (true)
-    {
-        action i;
-        int flag = 0; // to check if somehting has been popped out of monitor queue
-        // push action of a node into all its neighbours
-        pthread_mutex_lock(&mutex2);
-        pthread_cond_wait(&cond, &mutex2); // to signal that monitor queue has been updated
 
-        pthread_mutex_lock(&mutex_monitor); // to make the pop operation atomic
-
-        if (!monitor.empty())
-        {
-            flag = 1; // indicates that something has been popped out of monitor queue
-            i = monitor.front();
-            monitor.pop();
-        }
-        for (auto x : adj[i.user_id])
-        {
-            if (all_nodes[x].priority == 0)
-                pthread_mutex_lock(&feed_locks[x]);
-        }
-        pthread_mutex_unlock(&mutex_monitor);
-
-        if (flag == 1)
-        {
-            action temp = i;
-            for (auto j : adj[i.user_id])
-            {
-                // if node of id i.user_id has priority bit 1, then chrono_compare else priority_compare
-                if (all_nodes[j].priority == 1)
-                    pthread_mutex_lock(&feed_locks[j]);
-                all_nodes[j].feed.push(temp);
-                --all_nodes[j].new_actions;
-                if (all_nodes[j].priority == 0)
-                {
-                    pthread_mutex_lock(&mutex_readq);
-                    read_q.push(j);
-                    pthread_cond_broadcast(&cond_read);
-                    pthread_mutex_unlock(&mutex_readq);
-                }
-                else
-                {
-                    if (all_nodes[j].new_actions == 0)
-                    {
-                        pthread_mutex_lock(&mutex_readq);
-                        read_q.push(j);
-                        pthread_cond_broadcast(&cond_read);
-                        pthread_mutex_unlock(&mutex_readq);
-                    }
-                }
-                pthread_mutex_unlock(&feed_locks[j]);
-                printf("Pushed action %d of user %d into feed queue of user %d\n", temp.action_id, temp.user_id, j);
-                pthread_mutex_lock(&mutex_log);
-                fprintf(log_file, "Pushed action %d of user %d into feed queue of user %d\n", temp.action_id, temp.user_id, j);
-                pthread_mutex_unlock(&mutex_log);
-            }
-        }
-        // if time priority we can immediately signal else wait for all actions of a particular node to be pushed into feed queues
-
-        pthread_mutex_unlock(&mutex2);
-    }
-    return NULL;
-}
 // User simulator threads
-
 void *user_sim(void *arg)
 {
     vector<int> generated;
@@ -269,6 +206,107 @@ void *user_sim(void *arg)
     }
     return NULL;
 }
+
+// pushUpdate threads
+void *pushUpdate(void *arg)
+{
+    while (true)
+    {
+        action i;
+        int flag = 0; // to check if somehting has been popped out of monitor queue
+        // push action of a node into all its neighbours
+        pthread_mutex_lock(&mutex2);
+        pthread_cond_wait(&cond, &mutex2); // to signal that monitor queue has been updated
+
+        pthread_mutex_lock(&mutex_monitor); // to make the pop operation atomic
+
+        if (!monitor.empty())
+        {
+            flag = 1; // indicates that something has been popped out of monitor queue
+            i = monitor.front();
+            monitor.pop();
+        }
+        for (auto x : adj[i.user_id])
+        {
+            if (all_nodes[x].priority == 0)
+                pthread_mutex_lock(&feed_locks[x]);
+        }
+        pthread_mutex_unlock(&mutex_monitor);
+
+        if (flag == 1)
+        {
+            action temp = i;
+            for (auto j : adj[i.user_id])
+            {
+                // if node of id i.user_id has priority bit 1, then chrono_compare else priority_compare
+                if (all_nodes[j].priority == 1)
+                    pthread_mutex_lock(&feed_locks[j]);
+                all_nodes[j].feed.push(temp);
+                --all_nodes[j].new_actions;
+                if (all_nodes[j].priority == 0)
+                {
+                    pthread_mutex_lock(&mutex_readq);
+                    read_q.push(j);
+                    pthread_cond_broadcast(&cond_read);
+                    pthread_mutex_unlock(&mutex_readq);
+                }
+                else
+                {
+                    if (all_nodes[j].new_actions == 0)
+                    {
+                        pthread_mutex_lock(&mutex_readq);
+                        read_q.push(j);
+                        pthread_cond_broadcast(&cond_read);
+                        pthread_mutex_unlock(&mutex_readq);
+                    }
+                }
+                pthread_mutex_unlock(&feed_locks[j]);
+                printf("Pushed action %d of user %d into feed queue of user %d\n", temp.action_id, temp.user_id, j);
+                pthread_mutex_lock(&mutex_log);
+                fprintf(log_file, "Pushed action %d of user %d into feed queue of user %d\n", temp.action_id, temp.user_id, j);
+                pthread_mutex_unlock(&mutex_log);
+            }
+        }
+        // if time priority we can immediately signal else wait for all actions of a particular node to be pushed into feed queues
+
+        pthread_mutex_unlock(&mutex2);
+    }
+    return NULL;
+}
+
+
+// readpost threads
+void* readPost(void* arg){
+       while(true){
+        int i;
+        int flag = 0;
+        pthread_mutex_lock(&mutex3);
+        pthread_cond_wait(&cond_read, &mutex3); // to signal that some node's feedqueue has been updated 
+
+        pthread_mutex_lock(&mutex_readq); // to make the pop operation atomic
+        if (!read_q.empty())
+        {
+            flag=1; // indicates that something has been popped out of read queue
+            i = read_q.front();
+            read_q.pop();
+        }
+        pthread_mutex_unlock(&mutex_readq);
+
+        if(flag == 1){
+           pthread_mutex_lock(&feed_locks[i]);
+           while(!(all_nodes[i].feed).empty()){
+             action temp = (all_nodes[i].feed).top();
+             printf("I read action number %d of type %d posted by user %d at time %s\n",temp.action_id,temp.action_type,temp.user_id,ctime(&(temp.timestamp)));
+             fprintf(log_file, "I read action number %d of type %d posted by user %d at time %s\n",temp.action_id,temp.action_type,temp.user_id,ctime(&(temp.timestamp)));
+             (all_nodes[i].feed).pop();
+           }
+           pthread_mutex_unlock(&feed_locks[i]);
+        }
+        pthread_mutex_unlock(&mutex3);
+      }
+      return NULL; 
+}
+
 int main()
 {
     int pos, n1, n2;
@@ -322,11 +360,21 @@ int main()
     {
         pthread_create(push_update + i, NULL, pushUpdate, NULL);
     }
+    // creating 10 threads of readPost
+    pthread_t read_post[10];
+    for (int i = 0; i < 10; i++)
+    {
+        pthread_create(&read_post[i], NULL, readPost, NULL);
+    }
 
     // To be at the end
     for (int i = 0; i < 25; i++)
     {
         pthread_join(push_update[i], NULL);
+    }
+    for (int i = 0; i < 10; i++)
+    {
+        pthread_join(read_post[i],NULL);
     }
     pthread_join(us_sim_thrd, NULL);
     return 0;
