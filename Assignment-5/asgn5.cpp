@@ -9,12 +9,11 @@
 
 using namespace std;
 
-class cmp
+struct cmp
 {
-public:
-    bool operator()(pair<int, int> &a, pair<int, int> &b)
+    bool operator()(const pair<int, int> &a, const pair<int, int> &b)const
     {
-        return a.second <= b.second;
+        return a.second < b.second;
     }
 };
 
@@ -28,22 +27,26 @@ typedef struct
 int N, Y, X;
 int *guests_priority;
 room *all_rooms;
-priority_queue<pair<int, int>> rooms_prio; // pair.first-> roomId, Pair.second-> priority
+multiset<pair<int, int>, cmp> rooms_prio; // pair.first-> roomId, Pair.second-> priority
 sem_t total_occupancy;
 int uncleaned;
-pthread_mutex_t unclnlock = PTHREAD_MUTEX_INITIALIZER, roomlock = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t clean_start;
+pthread_mutex_t unclnlock = PTHREAD_MUTEX_INITIALIZER; 
+pthread_mutex_t roomlock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t clean_start=PTHREAD_COND_INITIALIZER;
 
 void *guest(void *arg)
 {
-    int p = *((int *)arg); // probable error place
+    int p = *((int *)arg); 
     pair<int, int> temp;
     srand(time(NULL));
     int smval;
     while (1)
     {
+        cout << "\nEntered guest thread with priority " << p;
         int random_time = random() % 9 + 11;
+        cout << ". This Guest sleeps for " << random_time << " seconds before requesting the room" << endl;
         sleep(random_time);
+        printf("\nGuest with priority %d wakes up and requests for the room \n",p);
         // get lock for uncleaned
         pthread_mutex_lock(&unclnlock);
         if (uncleaned == 0)
@@ -58,33 +61,40 @@ void *guest(void *arg)
             else
             {
                 pthread_mutex_lock(&roomlock);
-                temp = rooms_prio.top();
+                auto it = rooms_prio.begin();
+                temp = *it;
+                rooms_prio.erase(it);
                 if (temp.second == -1)
                 {
                     temp.second = p + (all_rooms[temp.first].g_count) * Y;
-                    rooms_prio.pop();
-                    rooms_prio.push(temp);
+                    rooms_prio.insert(temp);
                     ++all_rooms[temp.first].g_count;
                     // all_rooms guest priority under consideration
                     int sleep_time = rand() % 19 + 11;
                     all_rooms[temp.first].timestayed[all_rooms[temp.first].g_count - 1] = sleep_time;
-                      
+                    printf("Guest with priority %d occupied the room %d. ", p, temp.first); 
+                    printf("This guest sleeps here for %d seconds \n",sleep_time);
+
                     pthread_mutex_unlock(&roomlock);
                     uncleaned = N;
                     pthread_cond_broadcast(&clean_start);
                     pthread_mutex_unlock(&unclnlock);
                     sleep(sleep_time);
                     // wake frm sleep
+
                 }
                 else if (temp.second <= Y && p > temp.second)
                 {
                     temp.second = p + (all_rooms[temp.first].g_count) * Y;
-                    rooms_prio.pop();
-                    rooms_prio.push(temp);
+                    rooms_prio.insert(temp);
                     ++all_rooms[temp.first].g_count;
                     // all_rooms guest priority under consideration
                     int sleep_time = rand() % 19 + 11;
                     all_rooms[temp.first].timestayed[all_rooms[temp.first].g_count - 1] = sleep_time;
+
+                    printf("Guest with priority %d occupied the room %d. ", p, temp.first);
+                    printf("This guest sleeps here for %d seconds \n",sleep_time);
+
                     uncleaned = N;
                     pthread_cond_broadcast(&clean_start);
                     pthread_mutex_unlock(&unclnlock);
@@ -102,30 +112,40 @@ void *guest(void *arg)
                 continue;
             }
             pthread_mutex_lock(&roomlock);
-            temp = rooms_prio.top();
+            auto it = rooms_prio.begin();
+            temp = *it;
+            rooms_prio.erase(it);
             if (temp.second == -1)
             {
                 temp.second = p + (all_rooms[temp.first].g_count) * Y;
-                rooms_prio.pop();
-                rooms_prio.push(temp);
+                rooms_prio.insert(temp);
                 ++all_rooms[temp.first].g_count;
                 // all_rooms guest priority under consideration
                 int sleep_time = rand() % 19 + 11;
                 all_rooms[temp.first].timestayed[all_rooms[temp.first].g_count - 1] = sleep_time;
+                
+                printf("Guest with priority %d occupied the room %d. ", p, temp.first);
+                printf("This guest sleeps here for %d seconds \n",sleep_time);
 
                 pthread_mutex_unlock(&roomlock);
                 sleep(sleep_time);
                 // wake frm sleep
+                rooms_prio.erase(temp);
+                temp.second = -1;
+                rooms_prio.insert(temp);
             }
             else if (temp.second <= Y && p > temp.second)
             {
                 temp.second = p + (all_rooms[temp.first].g_count) * Y;
-                rooms_prio.pop();
-                rooms_prio.push(temp);
+                rooms_prio.insert(temp);
                 ++all_rooms[temp.first].g_count;
                 // all_rooms guest priority under consideration
                 int sleep_time = rand() % 19 + 11;
                 all_rooms[temp.first].timestayed[all_rooms[temp.first].g_count - 1] = sleep_time;
+                
+                printf("Guest with priority %d occupied the room %d. ", p, temp.first);
+                printf("This guest sleeps here for %d seconds \n",sleep_time);
+
                 // wakeup thread with priority temp.second from sleep
                 pthread_mutex_unlock(&roomlock);
                 sleep(sleep_time);
@@ -136,6 +156,10 @@ void *guest(void *arg)
                 pthread_mutex_unlock(&roomlock);
             }
         }
+        else {
+            cout << "Caution: Cleaning in progress. Room cannot be assigned." << endl;
+            pthread_mutex_unlock(&unclnlock);
+        }
     }
     return NULL;
 }
@@ -144,6 +168,7 @@ void *cleaner(void *arg)
 {
     int r;
     int st;
+    int cleaner_id = *((int *)arg);
     pthread_mutex_t dmut = PTHREAD_MUTEX_INITIALIZER;
     while (1)
     {
@@ -166,6 +191,8 @@ void *cleaner(void *arg)
                         // room is empty
                         st = all_rooms[r].timestayed[1] + all_rooms[r].timestayed[0];
                         all_rooms[r].g_count = 0;
+
+                        printf("\nCleaner %d cleans room %d for the time %d seconds\n", cleaner_id, r, st);
                         // release lock
                         pthread_mutex_unlock(&roomlock);
                         sleep(st);
@@ -175,28 +202,21 @@ void *cleaner(void *arg)
                         // wake the guest thread
                         st = all_rooms[r].timestayed[1] + all_rooms[r].timestayed[0];
                         all_rooms[r].g_count = 0;
+
+                        printf("\nCleaner %d cleans room %d for the time %d seconds\n", cleaner_id, r, st);
                         pthread_mutex_unlock(&roomlock);
                         sleep(st);
                     }
-                    pthread_mutex_lock(&unclnlock);
                     // get lock for uncleaned
-                    if (uncleaned == 0)
-                    {
+                    pthread_mutex_lock(&unclnlock);
+                    if(uncleaned == 0) {
                         pthread_mutex_unlock(&unclnlock);
-                        // release lock
                         break;
                     }
-                    else
-                    {
-                        if (uncleaned == 1)
-                        {
-                            --uncleaned;
-                            pthread_mutex_unlock(&unclnlock);
-                            // release lock
-                            break;
-                        }
-                    }
+                    --uncleaned;
+                    sem_post(&total_occupancy);
                     // release lock
+                    pthread_mutex_unlock(&unclnlock);
                 }
             }
             else
@@ -214,17 +234,17 @@ void *cleaner(void *arg)
 int main()
 {
     uncleaned = 0;
-    cout << "Enter N:";
-    cin >> N;
     cout << "Enter Y:";
     cin >> Y;
+    cout << "Enter N:";
+    cin >> N;
     cout << "Enter X:";
     cin >> X;
 
     all_rooms = new room[N];
     for (int i = 0; i < N; ++i)
     {
-        rooms_prio.push({i, -1});
+        rooms_prio.insert({i, -1});
     }
     guests_priority = new int[Y];
     srand(time(NULL));
@@ -237,7 +257,7 @@ int main()
         while (1)
         {
             temp = rand() % Y + 1;
-            if (s.find(temp) != s.end())
+            if (s.find(temp) == s.end())
             {
                 s.insert(temp);
                 guests_priority[i] = temp;
@@ -250,10 +270,15 @@ int main()
     for (int i = 0; i < Y; i++)
         pthread_create(&guest_thr[i], NULL, guest, guests_priority + i);
 
+    int* cleaner_ids;
+    cleaner_ids = (int*)malloc(X*sizeof(int));
+    for(int i = 0; i < X; i++)
+     cleaner_ids[i] = i+1;
+
     // Creating cleaner threads
     vector<pthread_t> cleaner_thr(X);
     for (int i = 0; i < X; i++)
-        pthread_create(&cleaner_thr[i], NULL, cleaner, NULL);
+        pthread_create(&cleaner_thr[i], NULL, cleaner, cleaner_ids+i);
 
     for (int i = 0; i < Y; i++)
         pthread_join(guest_thr[i], NULL);
@@ -264,3 +289,4 @@ int main()
 
     return 0;
 }
+
