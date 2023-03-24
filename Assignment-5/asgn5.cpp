@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <signal.h>
+#include <error.h>
 
 using namespace std;
 
@@ -24,9 +26,44 @@ typedef struct
     int current_guest_priority = -1;
 } room;
 
+void sigusr1_handler(int signo) {
+    // do nothing
+}
+
+unsigned int sleep_new(unsigned int seconds) {
+    struct sigaction sa;
+    sa.sa_handler = sigusr1_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+        perror("sigaction");
+        exit(1);
+    }
+
+    struct timespec timeout;
+    timeout.tv_sec = seconds;
+    timeout.tv_nsec = 0;
+
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGUSR1);
+    sigprocmask(SIG_BLOCK, &mask, NULL);
+
+    int sig = sigtimedwait(&mask, NULL, &timeout);
+
+    if (sig == -1 && errno == EAGAIN) {
+        return timeout.tv_sec;
+    }
+
+    return 0;
+}
+
 int N, Y, X;
 int *guests_priority;
 room *all_rooms;
+pthread_t* guest_thr;
+pthread_t* tid_priority_map;
 multiset<pair<int, int>, cmp> rooms_prio; // pair.first-> roomId, Pair.second-> priority
 sem_t total_occupancy;
 int uncleaned;
@@ -79,12 +116,23 @@ void *guest(void *arg)
                     uncleaned = N;
                     pthread_cond_broadcast(&clean_start);
                     pthread_mutex_unlock(&unclnlock);
-                    sleep(sleep_time);
+                    int ret_val = sleep_new(sleep_time);
                     // wake frm sleep
+                    printf("\nThe stay of the guest with priority %d is over.\n",p);
+                    if(ret_val == 0) {
+                        printf("\nGuest with priority %d kicked out of the room %d. ", p, temp.first);
+                        rooms_prio.erase(temp);
+                    }
+                   else {
+                     rooms_prio.erase(temp);
+                     temp.second = -1;
+                     rooms_prio.insert(temp);
+                   }
 
                 }
                 else if (temp.second <= Y && p > temp.second)
                 {
+                    pthread_kill(tid_priority_map[temp.second-1],SIGUSR1);
                     temp.second = p + (all_rooms[temp.first].g_count) * Y;
                     rooms_prio.insert(temp);
                     ++all_rooms[temp.first].g_count;
@@ -128,14 +176,24 @@ void *guest(void *arg)
                 printf("This guest sleeps here for %d seconds \n",sleep_time);
 
                 pthread_mutex_unlock(&roomlock);
-                sleep(sleep_time);
-                // wake frm sleep
-                rooms_prio.erase(temp);
-                temp.second = -1;
-                rooms_prio.insert(temp);
+                int ret_val = sleep_new(sleep_time);
+                printf("The stay of the guest with priority %d is over\n",p);
+                if(ret_val == 0) {
+                 printf("\nGuest with priority %d kicked out of the room %d. ", p, temp.first);
+                 rooms_prio.erase(temp);
+                }
+                else {
+                  rooms_prio.erase(temp);
+                  temp.second = -1;
+                  rooms_prio.insert(temp);
+                }
             }
             else if (temp.second <= Y && p > temp.second)
             {
+                //printf("temp second is %d\n", temp.second);
+                //printf("kill thread id: %ld\n",tid_priority_map[temp.second-1]);
+                //printf("This thread %ld and priority %d is killed\n",tid_priority_map[temp.second-1], temp.second);
+                pthread_kill(tid_priority_map[temp.second-1],SIGUSR1);
                 temp.second = p + (all_rooms[temp.first].g_count) * Y;
                 rooms_prio.insert(temp);
                 ++all_rooms[temp.first].g_count;
@@ -148,7 +206,16 @@ void *guest(void *arg)
 
                 // wakeup thread with priority temp.second from sleep
                 pthread_mutex_unlock(&roomlock);
-                sleep(sleep_time);
+                int ret_val = sleep_new(sleep_time);
+                if(ret_val == 0) {
+                 printf("\nGuest with priority %d kicked out of the room %d. ", p, temp.first);
+                 rooms_prio.erase(temp);
+                }
+                else {
+                  rooms_prio.erase(temp);
+                  temp.second = -1;
+                  rooms_prio.insert(temp);
+                }
             }
             else
             {
@@ -203,7 +270,6 @@ void *cleaner(void *arg)
                         // wake the guest thread
                         st = all_rooms[r].timestayed[1] + all_rooms[r].timestayed[0];
                         all_rooms[r].g_count = 0;
-
                         printf("\nCleaner %d cleans room %d for the time %d seconds\n", cleaner_id, r, st);
                         pthread_mutex_unlock(&roomlock);
                         sleep(st);
@@ -212,7 +278,6 @@ void *cleaner(void *arg)
                     pthread_mutex_lock(&unclnlock);
                     if (uncleaned == 0)
                     {
-                        cout<<"uncleaned is "<<uncleaned<<endl;
                         pthread_mutex_unlock(&unclnlock);
                         // release lock
                         break;
@@ -222,17 +287,14 @@ void *cleaner(void *arg)
                         if (uncleaned == 1)
                         {
                             --uncleaned;
-                            cout<<"uncleaned is "<<uncleaned<<endl;
                             // release lock
                             for(int i=0;i<2*N;++i)sem_post(&total_occupancy);
                             pthread_mutex_unlock(&unclnlock);
                             break;
                         }
                         --uncleaned;
-                        cout<<"uncleaned is "<<uncleaned<<endl;
                         pthread_mutex_unlock(&unclnlock);
                     }
-    
                 }
                 else {
                     pthread_mutex_unlock(&roomlock);
@@ -285,9 +347,15 @@ int main()
         }
     }
     // Creating guest threads
-    vector<pthread_t> guest_thr(Y); // send args
-    for (int i = 0; i < Y; i++)
+    guest_thr = (pthread_t*)malloc(Y*sizeof(pthread_t));
+    tid_priority_map = (pthread_t*)malloc(Y*sizeof(pthread_t));
+    for (int i = 0; i < Y; i++){
         pthread_create(&guest_thr[i], NULL, guest, guests_priority + i);
+        tid_priority_map[guests_priority[i]-1] = guest_thr[i];
+    }
+
+    /*for(int i = 0; i< Y; i++)
+     printf("%d : %ld\n",i+1, tid_priority_map[i]);*/
 
     int* cleaner_ids;
     cleaner_ids = (int*)malloc(X*sizeof(int));
@@ -308,3 +376,4 @@ int main()
 
     return 0;
 }
+
